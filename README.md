@@ -7,5 +7,6 @@
 
 ## Plans
 
+- Fiber
 - Server Sent Events streaming
 - Websocket streaming
