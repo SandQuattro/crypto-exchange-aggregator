@@ -20,10 +20,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app ./cmd/aggrega
 FROM alpine:latest
 
 # It's essential to regularly update the packages within the image to include security patches
-RUN apk update && apk upgrade
-
 # Reduce image size
-RUN rm -rf /var/cache/apk/* && \
+RUN apk update && apk upgrade && \
+    rm -rf /var/cache/apk/* && \
     rm -rf /tmp/*
 
 # Avoid running code as a root user
