@@ -44,7 +44,7 @@ func (c *CoinApi) callRequest(url string) ([]byte, error) {
 	req.URL.Scheme = "https"
 	req.URL.Host = "rest.coinapi.io"
 	req.Header.Add("accept", "text/plain")
-	//req.Header.Add("Authorization", c.Config.CoinApi.Key)
+	req.Header.Add("Authorization", c.Config.CoinApi.Key)
 
 	res, err := c.Client.Do(req)
 	if err != nil {
