@@ -1,4 +1,4 @@
-# crypto-exchange-aggregator
+# Crypto Exchange Aggregator
 
 ## Description
 
