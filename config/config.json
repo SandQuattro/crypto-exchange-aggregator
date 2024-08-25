@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "crypto-exchange-aggregator",
+    "version": "0.0.1"
+  },
+  "http": {
+    "port": 8080
+  },
+  "logger": {
+    "level": "DEBUG"
+  },
+  "keys": {
+    "coin_api": {
+      "key": ""
+    }
+  }
+}
