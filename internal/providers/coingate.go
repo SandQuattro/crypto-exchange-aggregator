@@ -1,7 +1,7 @@
 package coingate
 
 import (
-	"crypto-exchange-agg/cmd/internal/currency"
+	"crypto-exchange-agg/internal/currency"
 	"fmt"
 	"io"
 	"log"
@@ -14,7 +14,52 @@ type CoinGate struct {
 }
 
 func (c *CoinGate) GetAllCurrencies() (string, error) {
-	url := fmt.Sprintf("/api/v2/currencies")
+	url := "/api/v2/currencies"
+	request, err := c.callRequest(url)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(request)), nil
+}
+
+func (c *CoinGate) GetAllRates() (string, error) {
+	url := "/v2/rates"
+	request, err := c.callRequest(url)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(request)), nil
+}
+
+func (c *CoinGate) GetAllMerchantRates() (string, error) {
+	url := "/v2/rates/merchant"
+	request, err := c.callRequest(url)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(request)), nil
+}
+
+func (c *CoinGate) GetAllTraderRates() (string, error) {
+	url := "/v2/rates/trader"
+	request, err := c.callRequest(url)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(request)), nil
+}
+
+func (c *CoinGate) GetTraderBuyRates() (string, error) {
+	url := "v2/rates/trader/buy"
+	request, err := c.callRequest(url)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(request)), nil
+}
+
+func (c *CoinGate) GetTraderSellRates() (string, error) {
+	url := "v2/rates/trader/sell"
 	request, err := c.callRequest(url)
 	if err != nil {
 		return "", err

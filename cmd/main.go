@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto-exchange-agg/cmd/internal/currency"
-	coingate "crypto-exchange-agg/cmd/internal/providers"
+	"crypto-exchange-agg/internal/currency"
+	"crypto-exchange-agg/internal/providers"
 	"golang.org/x/sync/errgroup"
 	"log"
 	"net/http"
@@ -11,7 +11,8 @@ import (
 
 func main() {
 	from := []currency.Cryptocurrency{currency.EUR, currency.USD, currency.USDT, currency.USDC, currency.BTC, currency.ETH, currency.LTC, currency.DOGE}
-	// to := []currency.Cryptocurrency{}
+
+	log.Println(from[0].String())
 
 	coinGate := coingate.CoinGate{
 		Client: http.DefaultClient,
@@ -24,7 +25,34 @@ func main() {
 		if err != nil {
 			return err
 		}
-		log.Println(currencies)
+		log.Println("[ALL CURRENCIES] ", currencies)
+		return nil
+	})
+
+	g.Go(func() error {
+		rates, err := coinGate.GetAllRates()
+		if err != nil {
+			return err
+		}
+		log.Println("[ALL RATES] ", rates)
+		return nil
+	})
+
+	g.Go(func() error {
+		rates, err := coinGate.GetAllTraderRates()
+		if err != nil {
+			return err
+		}
+		log.Println("[ALL TRADER RATES] ", rates)
+		return nil
+	})
+
+	g.Go(func() error {
+		rates, err := coinGate.GetAllMerchantRates()
+		if err != nil {
+			return err
+		}
+		log.Println("[ALL MERCHANT RATES] ", rates)
 		return nil
 	})
 
