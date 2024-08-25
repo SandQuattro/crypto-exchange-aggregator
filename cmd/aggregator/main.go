@@ -13,6 +13,8 @@ func main() {
 	}
 
 	app := application.NewApplication()
-	app.Run(cfg)
-
+	err = app.Run(cfg)
+	if err != nil {
+		return
+	}
 }

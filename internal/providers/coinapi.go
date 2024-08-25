@@ -4,7 +4,6 @@ import (
 	"crypto-exchange-agg/config"
 	"crypto-exchange-agg/internal/currency"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -64,7 +63,7 @@ func (c *CoinApi) callRequest(url string) ([]byte, error) {
 	}
 
 	if val, ok := bodyMap["error"]; ok {
-		return nil, errors.New(fmt.Sprintf("api response: %d, error:%s", res.StatusCode, val))
+		return nil, fmt.Errorf("api response: %d, error:%s", res.StatusCode, val)
 	}
 
 	return body, err

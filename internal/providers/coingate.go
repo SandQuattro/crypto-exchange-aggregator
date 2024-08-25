@@ -2,7 +2,6 @@ package providers
 
 import (
 	"crypto-exchange-agg/internal/currency"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -117,7 +116,7 @@ func (c *CoinGate) callRequest(url string) ([]byte, error) {
 	}
 
 	if res.StatusCode != 200 {
-		return nil, errors.New(fmt.Sprintf("api response: %d, error:%s", res.StatusCode, string(body)))
+		return nil, fmt.Errorf("api response: %d, error:%s", res.StatusCode, string(body))
 	}
 
 	return body, err
