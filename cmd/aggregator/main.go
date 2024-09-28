@@ -1,9 +1,10 @@
 package main
 
 import (
+	"log"
+
 	"crypto-exchange-agg/config"
 	"crypto-exchange-agg/internal/application"
-	"log"
 )
 
 func main() {

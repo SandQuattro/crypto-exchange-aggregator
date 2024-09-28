@@ -1,12 +1,13 @@
 package providers
 
 import (
-	"crypto-exchange-agg/internal/currency"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+
+	"crypto-exchange-agg/internal/currency"
 )
 
 type CoinGate struct {

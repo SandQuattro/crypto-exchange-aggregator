@@ -4,4 +4,5 @@ dc:
 	docker-compose up --remove-orphans --build
 
 lint:
-	golangci-lint run
+	gofumpt -w ./..
+	golangci-lint run --fix

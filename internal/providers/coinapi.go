@@ -1,14 +1,16 @@
 package providers
 
 import (
-	"crypto-exchange-agg/config"
-	"crypto-exchange-agg/internal/currency"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+
+	"crypto-exchange-agg/config"
+	"crypto-exchange-agg/internal/currency"
 )
 
 type CoinApi struct {
@@ -18,6 +20,21 @@ type CoinApi struct {
 
 func (c *CoinApi) GetAllCurrencies() (string, error) {
 	url := "/v1/assets"
+	request, err := c.callRequest(url)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(request)), nil
+}
+
+func (c *CoinApi) GetUSDRates(from []currency.Cryptocurrency) (string, error) {
+	var assets strings.Builder
+	for _, asset := range from {
+		assets.WriteString(asset.String())
+		assets.WriteString(";")
+	}
+
+	url := fmt.Sprintf("/v1/assets?filter_asset_id=%s", assets.String())
 	request, err := c.callRequest(url)
 	if err != nil {
 		return "", err
@@ -43,7 +60,7 @@ func (c *CoinApi) callRequest(url string) ([]byte, error) {
 	req.URL.Scheme = "https"
 	req.URL.Host = "rest.coinapi.io"
 	req.Header.Add("accept", "text/plain")
-	req.Header.Add("Authorization", c.Config.CoinApi.Key)
+	req.Header.Add("Authorization", c.Config.CoinAPI.Key)
 
 	res, err := c.Client.Do(req)
 	if err != nil {
@@ -56,8 +73,16 @@ func (c *CoinApi) callRequest(url string) ([]byte, error) {
 		return nil, err
 	}
 
-	bodyMap := make(map[string]interface{})
+	bodyMap := make(map[any]any)
 	err = json.Unmarshal(body, &bodyMap)
+
+	var e *json.UnmarshalTypeError
+	if errors.As(err, &e) {
+		if e.Value == "array" {
+			return body, nil
+		}
+	}
+
 	if err != nil {
 		return nil, err
 	}

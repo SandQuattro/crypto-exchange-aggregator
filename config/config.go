@@ -2,13 +2,13 @@ package config
 
 import (
 	"fmt"
-	"github.com/ilyakaznacheev/cleanenv"
 	"path/filepath"
 	"runtime"
+
+	"github.com/ilyakaznacheev/cleanenv"
 )
 
 type (
-	// Config -.
 	Config struct {
 		App  `json:"app"`
 		HTTP `json:"http"`
@@ -16,28 +16,25 @@ type (
 		Keys `json:"keys"`
 	}
 
-	// App -.
 	App struct {
 		Name    string `env-required:"false" json:"name"    env:"APP_NAME"`
 		Version string `env-required:"false" json:"version" env:"APP_VERSION"`
 	}
 
-	// HTTP -.
 	HTTP struct {
 		Port int `env-required:"false" json:"port" env:"HTTP_PORT"`
 	}
 
-	// Log -.
 	Log struct {
 		Level string `env-required:"false" json:"level"   env:"LOG_LEVEL"`
 	}
 
-	CoinApi struct {
+	CoinAPI struct {
 		Key string `env-required:"true" json:"key" env:"COIN_API_KEY"`
 	}
 
 	Keys struct {
-		CoinApi `env-required:"false" json:"coin_api"`
+		CoinAPI `env-required:"false" json:"coin_api"`
 	}
 )
 
@@ -46,8 +43,9 @@ func NewConfig() (*Config, error) {
 	cfg := &Config{}
 
 	_, b, _, _ := runtime.Caller(0)
-	basepath := filepath.Dir(b)
-	configPath := filepath.Join(basepath, "config.json")
+	basePath := filepath.Dir(b)
+	configPath := filepath.Join(basePath, "config.json")
+
 	err := cleanenv.ReadConfig(configPath, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("config error: %w", err)
