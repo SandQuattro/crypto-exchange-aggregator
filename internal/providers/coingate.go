@@ -3,14 +3,16 @@ package providers
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
 	"crypto-exchange-agg/internal/currency"
+
+	"github.com/rs/zerolog"
 )
 
 type CoinGate struct {
+	Logger zerolog.Logger
 	Client *http.Client
 }
 
@@ -98,7 +100,8 @@ func (c *CoinGate) GetTraderSell(from, to currency.Cryptocurrency) (string, erro
 func (c *CoinGate) callRequest(url string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Fatal(err)
+		c.Logger.Fatal().Err(err).Msg("Failed to create HTTP request")
+		return nil, err
 	}
 
 	req.URL.Scheme = "https"
@@ -109,7 +112,11 @@ func (c *CoinGate) callRequest(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() {
+		if closeErr := res.Body.Close(); closeErr != nil {
+			c.Logger.Warn().Err(closeErr).Msg("Failed to close response body")
+		}
+	}()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {

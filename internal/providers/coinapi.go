@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/rs/zerolog"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/rs/zerolog"
 
 	"crypto-exchange-agg/config"
 	"crypto-exchange-agg/internal/currency"
@@ -61,13 +62,17 @@ func (c *CoinApi) callRequest(url string) ([]byte, error) {
 	req.URL.Scheme = "https"
 	req.URL.Host = "rest.coinapi.io"
 	req.Header.Add("accept", "text/plain")
-	req.Header.Add("Authorization", c.Config.CoinAPI.Key)
+	req.Header.Add("Authorization", c.Config.Key)
 
 	res, err := c.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() {
+		if closeErr := res.Body.Close(); closeErr != nil {
+			c.Logger.Warn().Err(closeErr).Msg("Failed to close response body")
+		}
+	}()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {

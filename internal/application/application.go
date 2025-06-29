@@ -32,6 +32,7 @@ func (a Application) Run(ctx context.Context, cfg *config.Config) error {
 	to := []currency.Cryptocurrency{currency.EUR, currency.USD}
 
 	coinGate := providers.CoinGate{
+		Logger: logger,
 		Client: client,
 	}
 
