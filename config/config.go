@@ -17,8 +17,9 @@ type (
 	}
 
 	App struct {
-		Name    string `env-required:"false" json:"name"    env:"APP_NAME"`
-		Version string `env-required:"false" json:"version" env:"APP_VERSION"`
+		Name     string `env-required:"false" json:"name"     env:"APP_NAME"`
+		Version  string `env-required:"false" json:"version"  env:"APP_VERSION"`
+		Provider string `env-required:"false" json:"provider" env:"CRYPTO_PROVIDER" env-default:"coingate"`
 	}
 
 	HTTP struct {
@@ -29,12 +30,12 @@ type (
 		Level string `env-required:"false" json:"level"   env:"LOG_LEVEL"`
 	}
 
-	CoinAPI struct {
-		Key string `env-required:"true" json:"key" env:"COIN_API_KEY"`
+	Keys struct {
+		CoinMarketCap `env-required:"false" json:"coinmarketcap"`
 	}
 
-	Keys struct {
-		CoinAPI `env-required:"false" json:"coin_api"`
+	CoinMarketCap struct {
+		Key string `env-required:"false" json:"key" env:"COINMARKETCAP_API_KEY"`
 	}
 )
 
@@ -53,7 +54,7 @@ func NewConfig() (*Config, error) {
 
 	err = cleanenv.ReadEnv(cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("env config error: %w", err)
 	}
 
 	return cfg, nil

@@ -1,7 +1,8 @@
 {
   "app": {
     "name": "crypto-exchange-aggregator",
-    "version": "0.0.1"
+    "version": "0.0.1",
+    "provider": "coinmarketcap"
   },
   "http": {
     "port": 8080
@@ -10,7 +11,7 @@
     "level": "DEBUG"
   },
   "keys": {
-    "coin_api": {
+    "coinmarketcap": {
       "key": ""
     }
   }
