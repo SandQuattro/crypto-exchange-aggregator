@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
@@ -14,6 +14,7 @@ import (
 )
 
 type CoinApi struct {
+	Logger zerolog.Logger
 	Client *http.Client
 	Config *config.Config
 }
@@ -54,7 +55,7 @@ func (c *CoinApi) GetRate(cryptocurrency currency.Cryptocurrency) (string, error
 func (c *CoinApi) callRequest(url string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Fatal(err)
+		c.Logger.Fatal().AnErr("NewRequest error", err)
 	}
 
 	req.URL.Scheme = "https"

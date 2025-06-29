@@ -1,6 +1,6 @@
 package currency
 
-//go:generate stringer -type=Cryptocurrency
+//go:generate go tool stringer -type=Cryptocurrency
 type Cryptocurrency int
 
 const (

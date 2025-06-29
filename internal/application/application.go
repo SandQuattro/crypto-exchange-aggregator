@@ -2,14 +2,19 @@ package application
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"net/http"
+
+	"crypto-exchange-agg/pkg/logging"
 
 	"crypto-exchange-agg/config"
 	"crypto-exchange-agg/internal/currency"
 	"crypto-exchange-agg/internal/providers"
+
 	"golang.org/x/sync/errgroup"
 )
+
+const CTX = "application"
 
 type Application struct{}
 
@@ -17,7 +22,10 @@ func NewApplication() *Application {
 	return &Application{}
 }
 
-func (a Application) Run(cfg *config.Config) error {
+func (a Application) Run(ctx context.Context, cfg *config.Config) error {
+	ctx = logging.GetCtxWithScope(logging.GetCtxWithTraceId(ctx), CTX)
+	logger := logging.GetCtxLogger(ctx)
+
 	client := http.DefaultClient
 
 	from := []currency.Cryptocurrency{currency.EUR, currency.USDT, currency.USDC, currency.BTC, currency.ETH, currency.LTC, currency.DOGE}
@@ -27,30 +35,13 @@ func (a Application) Run(cfg *config.Config) error {
 		Client: client,
 	}
 
-	coinAPI := providers.CoinApi{
+	_ = providers.CoinApi{
+		Logger: logger,
 		Client: client,
 		Config: cfg,
 	}
 
-	g, _ := errgroup.WithContext(context.Background())
-
-	g.Go(func() error {
-		currencies, err := coinAPI.GetUSDRates(from)
-		if err != nil {
-			return err
-		}
-		log.Println("[COIN API](USD RATES) ", currencies)
-		return nil
-	})
-
-	g.Go(func() error {
-		rates, err := coinGate.GetAllRates()
-		if err != nil {
-			return err
-		}
-		log.Println("[COIN GATE](ALL RATES) ", rates)
-		return nil
-	})
+	g, _ := errgroup.WithContext(ctx)
 
 	for _, currencyFrom := range from {
 		for _, currencyTo := range to {
@@ -60,14 +51,14 @@ func (a Application) Run(cfg *config.Config) error {
 					return err
 				}
 
-				log.Printf("Currency %s rate to %s: %s", currencyFrom, currencyTo, rate)
+				logger.Info().Msg(fmt.Sprintf("%s_%s: %s", currencyFrom, currencyTo, rate))
 				return nil
 			})
 		}
 	}
 
 	if err := g.Wait(); err != nil {
-		log.Println(err)
+		logger.Fatal().AnErr("Application running error", err)
 	}
 
 	return nil
