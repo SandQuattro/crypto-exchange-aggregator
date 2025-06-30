@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -159,8 +160,56 @@ func (c *CoinMarketCap) GetRates(
 	return rates, nil
 }
 
-// callRequest выполняет HTTP запрос к CoinMarketCap API.
+// callRequest выполняет HTTP запрос к CoinMarketCap API с retry логикой.
 func (c *CoinMarketCap) callRequest(ctx context.Context, url string) ([]byte, error) {
+	const maxRetries = 3
+	const retryDelay = 2 * time.Second
+
+	var lastErr error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		body, err := c.executeAPIRequest(ctx, url, attempt)
+		if err == nil {
+			return body, nil
+		}
+
+		lastErr = err
+		if attempt < maxRetries {
+			time.Sleep(retryDelay)
+		}
+	}
+
+	return nil, lastErr
+}
+
+// executeAPIRequest выполняет один HTTP запрос к API.
+func (c *CoinMarketCap) executeAPIRequest(ctx context.Context, url string, attempt int) ([]byte, error) {
+	req, err := c.createRequest(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	c.Logger.Debug().
+		Str("url", req.URL.String()).
+		Int("attempt", attempt).
+		Msg("Making CoinMarketCap API request")
+
+	res, err := c.Client.Do(req)
+	if err != nil {
+		c.Logger.Warn().Int("attempt", attempt).Err(err).Msg("API request failed, will retry")
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() {
+		if closeErr := res.Body.Close(); closeErr != nil {
+			c.Logger.Warn().Err(closeErr).Msg("Failed to close response body")
+		}
+	}()
+
+	return c.processResponse(res)
+}
+
+// createRequest создает HTTP запрос с нужными заголовками.
+func (c *CoinMarketCap) createRequest(ctx context.Context, url string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		c.Logger.Error().Err(err).Msg("Failed to create HTTP request")
@@ -172,18 +221,11 @@ func (c *CoinMarketCap) callRequest(ctx context.Context, url string) ([]byte, er
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("X-Cmc_pro_api_key", c.Config.Key)
 
-	c.Logger.Debug().Str("url", req.URL.String()).Msg("Making CoinMarketCap API request")
+	return req, nil
+}
 
-	res, err := c.Client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() {
-		if closeErr := res.Body.Close(); closeErr != nil {
-			c.Logger.Warn().Err(closeErr).Msg("Failed to close response body")
-		}
-	}()
-
+// processResponse обрабатывает HTTP ответ.
+func (c *CoinMarketCap) processResponse(res *http.Response) ([]byte, error) {
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)

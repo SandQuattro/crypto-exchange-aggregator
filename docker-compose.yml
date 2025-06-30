@@ -6,4 +6,4 @@ services:
     ports:
       - 8080:8080
     environment:
-      - COIN_API_KEY=${COIN_API_KEY}
+      - COINMARKETCAP_API_KEY=${COINMARKETCAP_API_KEY}

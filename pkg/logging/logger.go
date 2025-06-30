@@ -12,20 +12,20 @@ import (
 
 const (
 	scopeFieldName   = "scope"
-	traceIdFieldName = "trace_id"
+	traceIDFieldName = "trace_id"
 )
 
-var logger zerolog.Logger
+var globalLogger zerolog.Logger //nolint:gochecknoglobals // Global logger is acceptable pattern
 
 func GetCtxLogger(ctx context.Context) zerolog.Logger {
-	return logger.With().Ctx(ctx).Logger()
+	return globalLogger.With().Ctx(ctx).Logger()
 }
 
 func InitLogger(debug bool) {
 	partsOrder := []string{
 		zerolog.LevelFieldName,
 		zerolog.TimestampFieldName,
-		traceIdFieldName,
+		traceIDFieldName,
 		scopeFieldName,
 		zerolog.MessageFieldName,
 	}
@@ -35,20 +35,20 @@ func InitLogger(debug bool) {
 		TimeFormat: time.RFC3339,
 		PartsOrder: partsOrder,
 		FormatPrepare: func(m map[string]any) error {
-			formatFieldValue[string](m, "%s", traceIdFieldName)
+			formatFieldValue[string](m, "%s", traceIDFieldName)
 			formatFieldValue[string](m, "[%s]", scopeFieldName)
 			return nil
 		},
-		FieldsExclude: []string{traceIdFieldName, scopeFieldName},
+		FieldsExclude: []string{traceIDFieldName, scopeFieldName},
 	}
 
-	logger = zerolog.New(consoleWriter).Hook(ctxHook{})
+	globalLogger = zerolog.New(consoleWriter).Hook(ctxHook{})
 	if debug {
-		logger = logger.Level(zerolog.DebugLevel)
+		globalLogger = globalLogger.Level(zerolog.DebugLevel)
 	} else {
-		logger = logger.Level(zerolog.InfoLevel)
+		globalLogger = globalLogger.Level(zerolog.InfoLevel)
 	}
-	logger = logger.With().Timestamp().Logger()
+	globalLogger = globalLogger.With().Timestamp().Logger()
 }
 
 func formatFieldValue[T any](vs map[string]any, format string, field string) {
@@ -65,8 +65,8 @@ func (h ctxHook) Run(e *zerolog.Event, _ zerolog.Level, _ string) {
 	if scope, ok := GetScopeFromCtx(e.GetCtx()); ok {
 		e.Str(scopeFieldName, scope)
 	}
-	if traceId, ok := GetTraceIdFromCtx(e.GetCtx()); ok {
-		e.Str(traceIdFieldName, traceId)
+	if traceID, ok := GetTraceIDFromCtx(e.GetCtx()); ok {
+		e.Str(traceIDFieldName, traceID)
 	}
 }
 
@@ -76,10 +76,10 @@ func GetCtxWithScope(ctx context.Context, scope string) context.Context {
 	return context.WithValue(ctx, scopeCtxKey{}, scope)
 }
 
-type traceIdCtxKey struct{}
+type traceIDCtxKey struct{}
 
-func GetCtxWithTraceId(ctx context.Context) context.Context {
-	return context.WithValue(ctx, traceIdCtxKey{}, generateTraceId())
+func GetCtxWithTraceID(ctx context.Context) context.Context {
+	return context.WithValue(ctx, traceIDCtxKey{}, generateTraceID())
 }
 
 func GetScopeFromCtx(ctx context.Context) (string, bool) {
@@ -89,14 +89,14 @@ func GetScopeFromCtx(ctx context.Context) (string, bool) {
 	return "", false
 }
 
-func GetTraceIdFromCtx(ctx context.Context) (string, bool) {
-	if traceId, ok := ctx.Value(traceIdCtxKey{}).(string); ok {
-		return traceId, true
+func GetTraceIDFromCtx(ctx context.Context) (string, bool) {
+	if traceID, ok := ctx.Value(traceIDCtxKey{}).(string); ok {
+		return traceID, true
 	}
 	return "", false
 }
 
-func generateTraceId() string {
+func generateTraceID() string {
 	newUUID, err := uuid.NewUUID()
 	if err != nil {
 		return ""

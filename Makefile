@@ -1,6 +1,6 @@
 .PHONY: dc lint
 
-dc:
+dc: lint
 	docker-compose up --remove-orphans --build
 
 lint:
