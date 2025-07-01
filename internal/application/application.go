@@ -36,6 +36,8 @@ const (
 )
 
 type Application struct {
+	logger zerolog.Logger
+
 	latestRates map[string]string
 	ratesMutex  sync.RWMutex
 	clients     map[chan RateUpdate]bool
@@ -69,17 +71,17 @@ func (a *Application) Run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	ctx = logging.GetCtxWithScope(logging.GetCtxWithTraceID(ctx), CTX)
-	appLogger := logging.GetCtxLogger(ctx)
+	a.logger = logging.GetCtxLogger(ctx)
 
 	// Настройка провайдера и клиента
-	a.setupProvider(ctx, cfg, appLogger)
+	a.setupProvider(ctx, cfg)
 
 	// Настройка и запуск Fiber приложения
-	app := a.setupFiberApp(appLogger)
-	a.startServer(app, cfg, appLogger)
+	app := a.setupFiberApp()
+	a.startServer(app, cfg)
 
 	// Запуск основного цикла с таймером
-	return a.runMainLoop(ctx, app, appLogger)
+	return a.runMainLoop(ctx, app)
 }
 
 // handleSSE обрабатывает Server-Sent Events для стриминга курсов через Fiber.
@@ -89,11 +91,11 @@ func (a *Application) handleSSE(c *fiber.Ctx) error {
 	a.setupSSEHeaders(c)
 	appLogger.Info().Msg("New SSE client connected")
 
-	clientChan := a.registerClient(appLogger)
+	clientChan := a.registerClient()
 	notify := c.Context().Done()
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		a.streamToClient(w, clientChan, notify, appLogger)
+		a.streamToClient(w, clientChan, notify)
 	})
 
 	return nil
@@ -184,7 +186,7 @@ func (a *Application) fetchRates(
 }
 
 // handleFirstClient обрабатывает подключение первого клиента.
-func (a *Application) handleFirstClient(appLogger zerolog.Logger) {
+func (a *Application) handleFirstClient() {
 	a.ratesMutex.RLock()
 	hasData := len(a.latestRates) > 0
 	a.ratesMutex.RUnlock()
@@ -193,42 +195,42 @@ func (a *Application) handleFirstClient(appLogger zerolog.Logger) {
 		return
 	}
 
-	appLogger.Info().Msg("First client connected, fetching initial rates...")
+	a.logger.Info().Msg("First client connected, fetching initial rates...")
 	go func() {
 		err := a.fetchRates(a.ctx, a.client, a.symbols, a.targetCurrencies, a.provider, a.interval)
-		a.resetTimerAfterFetch(err, appLogger)
+		a.resetTimerAfterFetch(err)
 	}()
 }
 
 // resetTimerAfterFetch сбрасывает таймер после получения данных.
-func (a *Application) resetTimerAfterFetch(err error, appLogger zerolog.Logger) {
+func (a *Application) resetTimerAfterFetch(err error) {
 	if a.timer == nil {
 		return
 	}
 
 	if err != nil {
-		appLogger.Error().Err(err).Msg("Initial rate fetch for first client failed")
+		a.logger.Error().Err(err).Msg("Initial rate fetch for first client failed")
 		a.timer.Reset(ResetInterval * time.Second)
 		return
 	}
 
-	appLogger.Info().Msg("Initial rates fetched successfully, resetting timer")
+	a.logger.Info().Msg("Initial rates fetched successfully, resetting timer")
 	a.timer.Reset(a.interval)
 }
 
 // setupProvider настраивает провайдер и клиента для работы с API.
-func (a *Application) setupProvider(ctx context.Context, cfg *config.Config, appLogger zerolog.Logger) {
+func (a *Application) setupProvider(ctx context.Context, cfg *config.Config) {
 	httpClient := &http.Client{
 		Timeout: APIRequestTimeout,
 	}
 
 	client := &providers.CoinMarketCap{
-		Logger: appLogger,
+		Logger: a.logger,
 		Client: httpClient,
 		Config: cfg,
 	}
 
-	appLogger.Info().
+	a.logger.Info().
 		Str("provider", cfg.App.Provider).
 		Msg("Using crypto provider")
 
@@ -250,10 +252,10 @@ func (a *Application) setupProvider(ctx context.Context, cfg *config.Config, app
 }
 
 // setupFiberApp создает и настраивает Fiber приложение.
-func (a *Application) setupFiberApp(appLogger zerolog.Logger) *fiber.App {
+func (a *Application) setupFiberApp() *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			appLogger.Error().Err(err).Msg("Fiber error")
+			a.logger.Error().Err(err).Msg("Fiber error")
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": err.Error(),
 			})
@@ -280,63 +282,63 @@ func (a *Application) setupFiberApp(appLogger zerolog.Logger) *fiber.App {
 }
 
 // startServer запускает HTTP сервер в отдельной горутине.
-func (a *Application) startServer(app *fiber.App, cfg *config.Config, appLogger zerolog.Logger) {
+func (a *Application) startServer(app *fiber.App, cfg *config.Config) {
 	go func() {
-		appLogger.Info().
+		a.logger.Info().
 			Int("port", cfg.HTTP.Port).
 			Msg("Starting Fiber HTTP server")
 
 		addr := fmt.Sprintf(":%d", cfg.Port)
 		if err := app.Listen(addr); err != nil {
-			appLogger.Error().Err(err).Msg("Fiber server error")
+			a.logger.Error().Err(err).Msg("Fiber server error")
 		}
 	}()
 }
 
 // runMainLoop запускает основной цикл приложения с таймером.
-func (a *Application) runMainLoop(ctx context.Context, app *fiber.App, appLogger zerolog.Logger) error {
+func (a *Application) runMainLoop(ctx context.Context, app *fiber.App) error {
 	timer := time.NewTimer(a.interval)
 	defer timer.Stop()
 
 	a.timer = timer
 
-	appLogger.Info().
+	a.logger.Info().
 		Str("interval", a.interval.String()).
 		Msg("Starting periodic rate fetching with timer")
 
 	for {
 		select {
 		case <-ctx.Done():
-			appLogger.Info().Msg("Application context cancelled, stopping...")
+			a.logger.Info().Msg("Application context cancelled, stopping...")
 			if err := app.Shutdown(); err != nil {
-				appLogger.Error().Err(err).Msg("Fiber shutdown error")
+				a.logger.Error().Err(err).Msg("Fiber shutdown error")
 			}
 			return fmt.Errorf("context cancelled: %w", ctx.Err())
 		case <-timer.C:
-			a.handleTimerTick(timer, appLogger)
+			a.handleTimerTick(timer)
 		}
 	}
 }
 
 // handleTimerTick обрабатывает срабатывание таймера.
-func (a *Application) handleTimerTick(timer *time.Timer, appLogger zerolog.Logger) {
+func (a *Application) handleTimerTick(timer *time.Timer) {
 	// Проверяем наличие подключенных клиентов перед API запросом
 	a.clientMutex.RLock()
 	clientsCount := len(a.clients)
 	a.clientMutex.RUnlock()
 
 	if clientsCount == 0 {
-		appLogger.Info().Msg("No clients connected, skipping API call to save tokens")
+		a.logger.Info().Msg("No clients connected, skipping API call to save tokens")
 		timer.Reset(a.interval)
 		return
 	}
 
-	appLogger.Info().
+	a.logger.Info().
 		Int("connected_clients", clientsCount).
 		Msg("Timer triggered, fetching rates...")
 
 	if err := a.fetchRates(a.ctx, a.client, a.symbols, a.targetCurrencies, a.provider, a.interval); err != nil {
-		appLogger.Error().Err(err).Msg("Periodic rate fetch failed")
+		a.logger.Error().Err(err).Msg("Periodic rate fetch failed")
 		timer.Reset(ResetInterval * time.Second)
 	} else {
 		timer.Reset(a.interval)
@@ -354,7 +356,7 @@ func (a *Application) setupSSEHeaders(c *fiber.Ctx) {
 }
 
 // registerClient регистрирует нового SSE клиента.
-func (a *Application) registerClient(appLogger zerolog.Logger) chan RateUpdate {
+func (a *Application) registerClient() chan RateUpdate {
 	clientChan := make(chan RateUpdate, 1)
 
 	a.clientMutex.Lock()
@@ -363,13 +365,13 @@ func (a *Application) registerClient(appLogger zerolog.Logger) chan RateUpdate {
 	clientsCount := len(a.clients)
 	a.clientMutex.Unlock()
 
-	appLogger.Info().
+	a.logger.Info().
 		Int("total_clients", clientsCount).
 		Bool("first_client", wasEmpty).
 		Msg("SSE client registered")
 
 	if wasEmpty {
-		a.handleFirstClient(appLogger)
+		a.handleFirstClient()
 	}
 
 	return clientChan
@@ -380,31 +382,30 @@ func (a *Application) streamToClient(
 	w *bufio.Writer,
 	clientChan chan RateUpdate,
 	notify <-chan struct{},
-	appLogger zerolog.Logger,
 ) {
-	defer a.cleanupClient(clientChan, appLogger)
+	defer a.cleanupClient(clientChan)
 
-	if !a.sendInitialRates(w, appLogger) {
+	if !a.sendInitialRates(w) {
 		return
 	}
 
-	a.handleClientStream(w, clientChan, notify, appLogger)
+	a.handleClientStream(w, clientChan, notify)
 }
 
 // cleanupClient очищает ресурсы клиента.
-func (a *Application) cleanupClient(clientChan chan RateUpdate, appLogger zerolog.Logger) {
+func (a *Application) cleanupClient(clientChan chan RateUpdate) {
 	a.clientMutex.Lock()
 	delete(a.clients, clientChan)
 	remainingClients := len(a.clients)
 	a.clientMutex.Unlock()
 	close(clientChan)
-	appLogger.Info().
+	a.logger.Info().
 		Int("remaining_clients", remainingClients).
 		Msg("SSE client disconnected and cleaned up")
 }
 
 // sendInitialRates отправляет начальные данные курсов клиенту.
-func (a *Application) sendInitialRates(w *bufio.Writer, appLogger zerolog.Logger) bool {
+func (a *Application) sendInitialRates(w *bufio.Writer) bool {
 	a.ratesMutex.RLock()
 	defer a.ratesMutex.RUnlock()
 
@@ -420,11 +421,11 @@ func (a *Application) sendInitialRates(w *bufio.Writer, appLogger zerolog.Logger
 
 	data, _ := json.Marshal(update)
 	if _, err := fmt.Fprintf(w, "event: rates\ndata: %s\n\n", data); err != nil {
-		appLogger.Info().Msg("Failed to send initial rates data")
+		a.logger.Info().Msg("Failed to send initial rates data")
 		return false
 	}
 	if err := w.Flush(); err != nil {
-		appLogger.Info().Msg("Failed to flush initial rates data")
+		a.logger.Info().Msg("Failed to flush initial rates data")
 		return false
 	}
 
@@ -436,34 +437,33 @@ func (a *Application) handleClientStream(
 	w *bufio.Writer,
 	clientChan chan RateUpdate,
 	notify <-chan struct{},
-	appLogger zerolog.Logger,
 ) {
 	keepAliveTicker := time.NewTicker(SSEHeartbeatInterval)
 	defer keepAliveTicker.Stop()
 
-	appLogger.Info().Msg("Starting SSE stream for client")
+	a.logger.Info().Msg("Starting SSE stream for client")
 
 	for {
 		select {
 		case <-notify:
-			appLogger.Info().Msg("Client disconnected via context.Done()")
+			a.logger.Info().Msg("Client disconnected via context.Done()")
 			return
 
 		case <-keepAliveTicker.C:
-			appLogger.Debug().Msg("Sending heartbeat to client")
-			if !a.sendHeartbeat(w, appLogger) {
-				appLogger.Info().Msg("Heartbeat failed, client disconnected")
+			a.logger.Debug().Msg("Sending heartbeat to client")
+			if !a.sendHeartbeat(w) {
+				a.logger.Info().Msg("Heartbeat failed, client disconnected")
 				return
 			}
 
 		case update, ok := <-clientChan:
 			if !ok {
-				appLogger.Info().Msg("Client channel closed")
+				a.logger.Info().Msg("Client channel closed")
 				return
 			}
-			appLogger.Debug().Msg("Sending rate update to client")
-			if !a.sendRateUpdate(w, update, appLogger) {
-				appLogger.Info().Msg("Rate update failed, client disconnected")
+			a.logger.Debug().Msg("Sending rate update to client")
+			if !a.sendRateUpdate(w, update) {
+				a.logger.Info().Msg("Rate update failed, client disconnected")
 				return
 			}
 		}
@@ -471,15 +471,15 @@ func (a *Application) handleClientStream(
 }
 
 // sendHeartbeat отправляет heartbeat клиенту.
-func (a *Application) sendHeartbeat(w *bufio.Writer, appLogger zerolog.Logger) bool {
+func (a *Application) sendHeartbeat(w *bufio.Writer) bool {
 	// Быстрая проверка соединения без retry
 	if _, err := w.WriteString("event: heartbeat\ndata: ping\n\n"); err != nil {
-		appLogger.Info().Err(err).Msg("Client disconnected (heartbeat write failed)")
+		a.logger.Info().Err(err).Msg("Client disconnected (heartbeat write failed)")
 		return false
 	}
 
 	if err := w.Flush(); err != nil {
-		appLogger.Info().Err(err).Msg("Client disconnected (heartbeat flush failed)")
+		a.logger.Info().Err(err).Msg("Client disconnected (heartbeat flush failed)")
 		return false
 	}
 
@@ -487,24 +487,24 @@ func (a *Application) sendHeartbeat(w *bufio.Writer, appLogger zerolog.Logger) b
 }
 
 // sendRateUpdate отправляет обновление курсов клиенту.
-func (a *Application) sendRateUpdate(w *bufio.Writer, update RateUpdate, appLogger zerolog.Logger) bool {
+func (a *Application) sendRateUpdate(w *bufio.Writer, update RateUpdate) bool {
 	data, err := json.Marshal(update)
 	if err != nil {
-		appLogger.Error().Err(err).Msg("Failed to marshal rate update")
+		a.logger.Error().Err(err).Msg("Failed to marshal rate update")
 		return true // Продолжаем стрим
 	}
 
 	if _, writeErr := fmt.Fprintf(w, "event: rates\ndata: %s\n\n", data); writeErr != nil {
-		appLogger.Info().Msg("Client disconnected (write failed)")
+		a.logger.Info().Msg("Client disconnected (write failed)")
 		return false
 	}
 
 	if flushErr := w.Flush(); flushErr != nil {
-		appLogger.Info().Msg("Client disconnected (flush failed)")
+		a.logger.Info().Msg("Client disconnected (flush failed)")
 		return false
 	}
 
-	appLogger.Info().Msg("Sent rate update to SSE client")
+	a.logger.Info().Msg("Sent rate update to SSE client")
 	return true
 }
 
@@ -528,7 +528,7 @@ func (a *Application) notifyAllClients(update RateUpdate, _ zerolog.Logger) int 
 }
 
 // checkAndCleanupAllClients проверяет состояние всех клиентов и очищает неактивных.
-func (a *Application) checkAndCleanupAllClients(logger zerolog.Logger) { //nolint:unused // Метод для отладки
+func (a *Application) checkAndCleanupAllClients() { //nolint:unused // Метод для отладки
 	a.clientMutex.Lock()
 	defer a.clientMutex.Unlock()
 
@@ -536,7 +536,7 @@ func (a *Application) checkAndCleanupAllClients(logger zerolog.Logger) { //nolin
 		return
 	}
 
-	logger.Info().
+	a.logger.Info().
 		Int("total_clients", len(a.clients)).
 		Msg("Checking client connections")
 
@@ -556,11 +556,11 @@ func (a *Application) checkAndCleanupAllClients(logger zerolog.Logger) { //nolin
 	// Очищаем отключенных клиентов
 	for _, clientChan := range disconnectedClients {
 		delete(a.clients, clientChan)
-		logger.Info().Msg("Cleaned up inactive client channel")
+		a.logger.Info().Msg("Cleaned up inactive client channel")
 	}
 
 	if len(disconnectedClients) > 0 {
-		logger.Info().
+		a.logger.Info().
 			Int("cleaned_clients", len(disconnectedClients)).
 			Int("active_clients", len(a.clients)).
 			Msg("Client cleanup completed")
